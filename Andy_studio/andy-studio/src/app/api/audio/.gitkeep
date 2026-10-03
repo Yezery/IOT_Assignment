@@ -1,0 +1,9 @@
+# Reserved for AI route handlers (audio upload, vision upload, ai orchestration).
+
+```
+src/app/api/
+├── devices/        ← implemented
+├── audio/          ← reserved (ASR / TTS)
+├── vision/         ← reserved (emotion)
+└── ai/             ← reserved (orchestration)
+```

@@ -1,0 +1,13 @@
+# Reserved for ASR / LLM / TTS / vision helpers.
+
+This directory intentionally has no runtime code yet. It exists so that
+the project layout matches the spec:
+
+```
+src/lib/
+├── mqtt/
+├── device/
+└── ai/        ← you are here
+```
+
+Future modules (e.g. `asr.ts`, `tts.ts`) should live here.

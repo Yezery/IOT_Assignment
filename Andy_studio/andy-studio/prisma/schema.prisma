@@ -1,0 +1,311 @@
+// Andy_studio × xiaozhi-esp32 integration schema.
+//
+// Conventions:
+//   - snake_case @map for column names (matches Postgres conventions)
+//   - camelCase in TS model field names
+//   - pgvector column lives on a `DocumentEmbedding` table; populated by future
+//     RAG migration (M5+). M0 leaves the table empty.
+//
+// AI engine tables (`User` / RAG) are NOT owned by Prisma here — RAG uses
+// better-sqlite3 per-device files (see `src/services/rag/`).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+enum UserRole {
+  admin
+  operator
+}
+
+enum DeviceStatus {
+  pending_activation
+  active
+  disabled
+}
+
+enum ActivationStatus {
+  pending
+  claimed
+  expired
+  revoked
+}
+
+enum ReleaseStatus {
+  draft
+  published
+  paused
+  archived
+}
+
+enum UpgradeState {
+  downloading
+  verifying
+  rebooting
+  success
+  failed
+}
+
+enum PromptScope {
+  global
+  group
+  device
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(operator)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  ownedDevices       Device[]          @relation("OwnerDevices")
+  firmwareReleases   FirmwareRelease[] @relation("CreatedReleases")
+  activationsCreated Activation[]      @relation("ActivationCreator")
+  activationsClaimed Activation[]      @relation("ActivationClaimer")
+  mcpToolConfigs     McpToolConfig[]
+  mcpPrompts         McpPrompt[]
+
+  @@map("users")
+}
+
+model DeviceGroup {
+  id        BigInt   @id @default(autoincrement())
+  name      String
+  parentId  BigInt?  @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  parent   DeviceGroup?  @relation("GroupTree", fields: [parentId], references: [id])
+  children DeviceGroup[] @relation("GroupTree")
+  devices  Device[]
+
+  @@map("device_groups")
+}
+
+model Device {
+  id           BigInt       @id @default(autoincrement())
+  deviceId     String       @unique @map("device_id")
+  clientId     String       @unique @map("client_id")
+  board        String
+  variant      String
+  boardName    String?      @map("board_name")
+  serialNumber String?      @unique @map("serial_number")
+  appVersion   String?      @map("app_version")
+  alias        String?
+  status       DeviceStatus @default(pending_activation)
+  groupId      BigInt?      @map("group_id")
+  ownerUserId  String?      @map("owner_user_id")
+  activationId BigInt?      @map("activation_id")
+  lastSeenAt   DateTime?    @map("last_seen_at")
+  activatedAt  DateTime?    @map("activated_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  metadata     Json?
+  deletedAt    DateTime?    @map("deleted_at")
+
+  group    DeviceGroup?      @relation(fields: [groupId], references: [id])
+  owner    User?             @relation("OwnerDevices", fields: [ownerUserId], references: [id])
+  tokens   DeviceToken[]
+  upgrades FirmwareUpgrade[]
+
+  @@index([board, variant])
+  @@index([status])
+  @@map("devices")
+}
+
+model FirmwareRelease {
+  id          String        @id @default(uuid())
+  board       String
+  variant     String
+  version     String
+  storageKey  String        @map("storage_key")
+  sizeBytes   BigInt        @map("size_bytes")
+  sha256      String
+  status      ReleaseStatus @default(draft)
+  rollout     Json
+  force       Boolean       @default(false)
+  notes       String?
+  createdById String?       @map("created_by")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  publishedAt DateTime?     @map("published_at")
+
+  createdBy User?             @relation("CreatedReleases", fields: [createdById], references: [id])
+  upgrades  FirmwareUpgrade[]
+
+  @@unique([board, variant, version])
+  @@index([status])
+  @@map("firmware_releases")
+}
+
+model FirmwareUpgrade {
+  id        BigInt       @id @default(autoincrement())
+  releaseId String       @map("release_id")
+  deviceId  BigInt       @map("device_id")
+  state     UpgradeState @default(downloading)
+  progress  Int          @default(0)
+  speedBps  BigInt?      @map("speed_bps")
+  startedAt DateTime     @default(now()) @map("started_at")
+  endedAt   DateTime?    @map("ended_at")
+  error     String?
+
+  release FirmwareRelease @relation(fields: [releaseId], references: [id])
+  device  Device          @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId])
+  @@index([releaseId])
+  @@map("firmware_upgrades")
+}
+
+model Activation {
+  id          BigInt           @id @default(autoincrement())
+  code        String           @unique
+  deviceId    BigInt?          @map("device_id")
+  status      ActivationStatus @default(pending)
+  challenge   String
+  message     String?
+  createdById String?          @map("created_by")
+  expiresAt   DateTime?        @map("expires_at")
+  claimedAt   DateTime?        @map("claimed_at")
+  claimedById String?          @map("claimed_by")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  createdBy User? @relation("ActivationCreator", fields: [createdById], references: [id])
+  claimedBy User? @relation("ActivationClaimer", fields: [claimedById], references: [id])
+
+  @@index([status])
+  @@map("activations")
+}
+
+model DeviceToken {
+  id        BigInt    @id @default(autoincrement())
+  deviceId  BigInt    @map("device_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  device Device @relation(fields: [deviceId], references: [id])
+
+  @@index([deviceId])
+  @@map("device_tokens")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorType  String   @map("actor_type")
+  actorId    String?  @map("actor_id")
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  payload    Json?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model McpToolConfig {
+  toolName    String   @id @map("tool_name")
+  enabled     Boolean  @default(true)
+  defaultArgs Json?    @map("default_args")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@map("mcp_tool_configs")
+}
+
+model McpPrompt {
+  id          BigInt      @id @default(autoincrement())
+  name        String
+  scope       PromptScope
+  scopeId     String?     @map("scope_id")
+  content     String
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  updatedById String?     @map("updated_by")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+
+  @@index([scope, scopeId])
+  @@map("mcp_prompts")
+}
+
+// pgvector-backed embedding store. Populated by future RAG migration.
+// Kept empty in M0; the existing per-device sqlite-vec RAG continues to work.
+model DocumentEmbedding {
+  id        BigInt                      @id @default(autoincrement())
+  scope     String
+  scopeId   String                      @map("scope_id")
+  docId     String                      @map("doc_id")
+  chunkIdx  Int                         @map("chunk_idx")
+  content   String
+  embedding Unsupported("vector(1024)")
+  metadata  Json?
+  createdAt DateTime                    @default(now()) @map("created_at")
+
+  @@unique([scope, scopeId, docId, chunkIdx])
+  @@index([scope, scopeId])
+  @@map("document_embeddings")
+}
+
+model ModelSetting {
+  id          Int      @id @default(1)
+  temperature Float    @default(0.7)
+  thinking    Boolean  @default(false)
+  maxTokens   Int?     @map("max_tokens")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("model_settings")
+}
+
+/// LLM provider configurations.
+///
+/// `name` is the lookup key used by `getLLMConfig(name)` in
+/// `services/ai/llm.ts` — values like "local" / "cloud" identify the
+/// slot; the row marked `active` is the one that drives the engine.
+///
+/// `apiKeyEnc` is the AES-256-GCM ciphertext of the upstream API key,
+/// never plaintext. `apiKeyHint` is the last 4 chars (e.g. "...a8f3")
+/// shown in the UI so the operator can tell keys apart without ever
+/// round-tripping the cleartext.
+model LlmProvider {
+  id           Int      @id @default(autoincrement())
+  name         String   @unique           // "local" | "cloud" | future slot key
+  displayName  String                     // user-visible label
+  kind         String                     // "ollama" | "openai-compatible"
+  baseUrl      String                     // e.g. "http://localhost:11434"
+  model        String                     // e.g. "qwen3.5:4b-mlx"
+  apiKeyEnc    String?  @map("api_key_enc")
+  apiKeyHint   String?  @map("api_key_hint") // last 4 chars for UI display
+  supportsThinking Boolean @default(false) @map("supports_thinking")
+  active       Boolean  @default(false)
+  createdAt    DateTime @default(now())   @map("created_at")
+  updatedAt    DateTime @updatedAt        @map("updated_at")
+
+  @@index([active])
+  @@map("llm_providers")
+}
+
+// Per-device, per-day chat history. "Day" is Asia/Shanghai (YYYY-MM-DD).
+// A new day yields no prior context (stateful chat resets next day).
+model ChatMessage {
+  id        BigInt   @id @default(autoincrement())
+  deviceId  String   @map("device_id")
+  day       String
+  role      String // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([deviceId, day, createdAt])
+  @@map("chat_messages")
+}
