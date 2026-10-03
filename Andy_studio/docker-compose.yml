@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: andy-studio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: andy
+      POSTGRES_PASSWORD: andy_dev_password
+      POSTGRES_DB: andy_studio
+    ports:
+      - "5432:5432"
+    volumes:
+      - andy_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U andy -d andy_studio"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  andy_pg_data:

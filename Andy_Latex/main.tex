@@ -1,0 +1,221 @@
+\documentclass[10pt,a4paper]{article}
+% -------------------- Packages --------------------
+\usepackage[a4paper,margin=1.4cm,top=1.1cm,bottom=1.2cm]{geometry}
+\usepackage{times}
+\usepackage{ctex}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning,fit,backgrounds}
+\usepackage{booktabs}
+% -------------------- Colors --------------------
+\definecolor{sectionblue}{HTML}{1a365d}
+\definecolor{lightgray}{HTML}{f7fafc}
+\definecolor{midgray}{HTML}{e2e8f0}
+\definecolor{accentgreen}{HTML}{2f855a}
+\definecolor{accentorange}{HTML}{c05621}
+% -------------------- Paragraph --------------------
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt plus 1pt minus 1pt}
+% -------------------- Section style --------------------
+\titleformat{\section}{\bfseries\color{sectionblue}\fontsize{12pt}{14pt}\selectfont}{\thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{6pt}{3pt}
+\titleformat{\subsection}{\bfseries\color{sectionblue}\fontsize{10pt}{12pt}\selectfont}{}{0pt}{}
+\titlespacing*{\subsection}{0pt}{3pt}{1pt}
+% -------------------- Hyperref --------------------
+\hypersetup{colorlinks=true,linkcolor=sectionblue,urlcolor=sectionblue,citecolor=sectionblue}
+% -------------------- Lists --------------------
+\setlist{nosep,leftmargin=*,topsep=2pt,parsep=0pt}
+\setlist[itemize]{itemsep=0pt,topsep=1pt}
+\setlist[enumerate]{itemsep=0pt,topsep=1pt}
+% -------------------- Header / Footer --------------------
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancyhead[L]{\footnotesize COMP6131 项目提案}
+\fancyhead[R]{\footnotesize Andy 医院陪护对话机器人}
+\fancyfoot[C]{\footnotesize 第 \thepage 页 / 共 \pageref{LastPage} 页}
+\renewcommand{\footrulewidth}{0.2pt}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\tabcolsep}{4pt}
+% -------------------- Document --------------------
+\begin{document}
+\noindent
+{\Large\bfseries 物联网基础——项目提案}\hfill {\small 第一组\quad 项目二}\par
+\vspace{1pt}
+{\small Andy：医院陪护对话机器人}\hfill {\small 开题报告\quad 9月8日}\par
+\vspace{-2pt}\hrule height 0.6pt
+\vspace{4pt}
+
+% ============================================================
+\section{选定课题}
+
+\textbf{题目：Andy——医院陪护对话机器人（Care Companion Chatbot）。}
+
+\textbf{项目定位。}Andy 是一款放置在医院病床边的智能语音陪护机器人。它通过纯语音交互为住院患者提供情感安抚与科室常识解答，并在医生 / 护士为每位患者定制专属护理与用药计划后，准确回答"我几点吃药、吃几粒"等问题，从而减轻医护重复交代的负担，缓解家属的照护焦虑。它是患者的"暖心陪伴者"和医护的"信息小助手"，\textbf{不是}医疗器械，\textbf{不进行任何医学诊断或开药}，\textbf{绝不能}替代医生、护士、治疗师或急救服务。
+
+\textbf{核心能力。}(1) 基于 Qwen3.5-2B + ESConv LoRA 微调的共情多轮对话；(2) 由医护为每位患者定制的专属用药与护理计划 RAG 知识库，机器人只读本床资料、绝不串台；(3) 训练侧用 ESConv 7 类标签、运行侧用 EmotionProvider 7 类标签协同的情绪疏导与温柔安抚；(4) 纯语音唤醒与对话（"Andy" 唤醒，免去按铃寻找按钮）；(5) 异常信号（情绪连续负向、关键词命中、设备侧 SOS）触发对护士与家属的告警。
+
+% ============================================================
+\section{技术栈选型}
+
+按端-管-云-模自下而上分层选型，每层附\textbf{选型依据}说明为何采用该方案：
+
+\begin{center}
+\footnotesize
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{2.4cm}|p{4.6cm}|p{6.8cm}|}
+\hline
+\rowcolor{midgray}
+\textbf{层级} & \textbf{选型} & \textbf{选型依据} \\
+\hline
+设备端 (IoT) & ESP32-S3 N16R8，Arduino 框架 & 病房长期在线要求稳定，资源足够支撑 Wi-Fi、MQTT/TLS、I2S 音频与未来的语音唤醒 / ASR / TTS；Arduino 生态成熟，便于快速迭代 \\
+\hline
+消息中间层 & EMQX（公有云） & 公有托管免运维；原生支持 Retain + LWT，便于以零轮询方式维护每台床旁设备的在线状态 \\
+\hline
+后端全栈 & Next.js 16（App Router）+ TypeScript；向量库 sqlite-vec & 单进程承载 MQTT 桥接、设备状态、Agent Harness、REST API 与医护后台 UI，部署简单；sqlite-vec 进程内嵌入，零额外服务 \\
+\hline
+智能体编排 & LangChain + DeepAgent(TS) + Skills + MCP & LangChain 提供 LLM 抽象；DeepAgent(TS) 自带工具调用循环；Skills 与 MCP 支持新能力以文件方式热插拔 \\
+\hline
+知识检索 & Embedding bge-large-zh-v1.5（Ollama \texttt{/api/embeddings}，1024 维） & 中文检索效果好；Ollama 同样提供 embedding 端点，复用以避免额外推理服务 \\
+\hline
+LLM 基座 & Qwen3.5-2B（HuggingFace） & 中文能力强、显存占用小（$\geq$ 6 GB），便于本地 GGUF 部署 \\
+\hline
+LLM 微调与部署 & Unsloth + TRL SFTTrainer；推理链 merge\_lora $\rightarrow$ GGUF $\rightarrow$ Q6\_K $\rightarrow$ Ollama & Unsloth 显存友好、训练速度快；GGUF + Q6\_K 量化平衡质量与体积；Ollama 支持 Modelfile 注入 system prompt \\
+\hline
+\end{tabularx}
+\end{center}
+
+% ============================================================
+\section{应用场景与目标用户}
+
+本系统的部署场景为\textbf{医院病房}：每个床位配置一台 Andy，医护在后台为每位患者定制专属用药与护理计划，患者通过纯语音与机器人对话。
+
+\begin{center}
+\footnotesize
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{2.2cm}|X|}
+\hline
+\rowcolor{midgray}
+\textbf{目标用户} & \textbf{核心痛点} \\
+\hline
+住院患者 & 焦虑、健忘，常忘记"我几点吃什么药、吃几粒"，不好意思频繁按铃呼叫护士 \\
+\hline
+住院家属 & 工作忙碌无法全天陪护，担忧患者情绪与是否按时服药，不熟悉医院的探视或护理规定 \\
+\hline
+护士 / 医生 & 每天需反复向不同患者交代用药剂量、时间与基础护理须知，重复沟通占用核心护理时间，口头交代易被遗忘 \\
+\hline
+\end{tabularx}
+\end{center}
+
+系统提供：(1) 共情多轮对话，温柔安抚患者焦虑与疼痛情绪；(2) 严格按医嘱回答"我几点吃药、吃几粒"等用药问题（数据来自医护在后台录入的专属计划）；(3) 解释科室常识与检查流程，缓解陌生感；(4) 异常时立即建议按铃呼叫护士，并把关注信号同步给预设家属。
+
+% ============================================================
+\section{预期技术难度}
+
+\textbf{中高难度}——本项目跨越嵌入式、物联网、全栈、RAG、大模型微调与部署五大领域，工程难点集中在：(1) 病房噪声环境下的语音唤醒与远场 ASR；(2) EMQX Retain + LWT 在弱网 / 重连下的一致性，避免"假在线"漏告警；(3) Agent Harness 工具调用循环与 Skills / MCP 热插拔下，system prompt 分层合成稳定且不爆上下文；(4) Unsloth + TRL 在 2B 基座上做多 LoRA 微调并避免灾难性遗忘；(5) sqlite-vec KNN（带 \texttt{k=?} 约束）与 Embedding 事务一致性，确保每张床的用药计划严格隔离；(6) LoRA、GGUF、Q6\_K、Ollama 一条链路上量化不引起对话质量退化与时延失控。
+
+% ============================================================
+\section{系统整体架构}
+
+\begin{center}
+\resizebox{0.95\textwidth}{!}{%
+\begin{tikzpicture}[
+    node distance=0.5cm and 0.9cm,
+    every node/.style={font=\footnotesize},
+    block/.style={rectangle, draw=sectionblue, fill=lightgray, rounded corners=2pt,
+                  minimum height=0.7cm, minimum width=1.8cm, align=center},
+    cloud/.style={rectangle, draw=accentgreen, fill=lightgray, rounded corners=2pt,
+                  minimum height=0.7cm, minimum width=1.9cm, align=center},
+    ai/.style={rectangle, draw=accentorange, fill=lightgray, rounded corners=2pt,
+               minimum height=0.7cm, minimum width=1.8cm, align=center},
+    arrow/.style={->, >=stealth, thick, sectionblue}
+]
+\node[block] (esp) {ESP32-S3};
+\node[cloud, right=of esp] (emqx) {EMQX Cloud};
+\node[block, right=of emqx] (next) {Next.js};
+\node[ai, right=of next] (ollama) {Ollama\\\scriptsize qwen-esconv};
+\node[ai, below=of ollama] (embed) {bge-large-zh\\\scriptsize v1.5};
+\node[block, below=of embed] (vec) {sqlite-vec};
+\node[ai, below=of next] (harness) {Agent Harness};
+\node[block, left=of harness] (dash) {医护后台};
+\draw[arrow] (esp) -- node[above]{\tiny MQTT} (emqx);
+\draw[arrow] (emqx) -- node[above]{\tiny MQTT} (next);
+\draw[arrow] (next) -- node[above]{\tiny /v1} (ollama);
+\draw[arrow] (ollama) -- node[right]{\tiny embed} (embed);
+\draw[arrow] (embed) -- (vec);
+\draw[arrow] (vec) -- (harness);
+\draw[arrow] (ollama) -- (harness);
+\draw[arrow] (harness) -- (next);
+\draw[arrow] (next) -- (dash);
+\end{tikzpicture}%
+}
+\end{center}
+
+\textbf{端到端数据流。}患者对床边的 Andy 说话，设备通过语音唤醒 + ASR 把文字送入本地提示；文字经 MQTT/TLS 发到 EMQX Cloud 公有 Broker；EMQX 转发至 Next.js 后端的单进程服务，触发 LangChain + DeepAgent(TS) 的 Agent Harness。Harness 按"先查 RAG 再答"的策略，优先读取该床位 \texttt{data/<bedId>.db} 内医护录入的用药与护理知识（KNN 检索），再结合 ESConv 微调的对话模型生成回复，最后通过 OpenAI 兼容 HTTP（\texttt{/v1}）调用本地 Ollama 推理。回复原路返回设备，经 TTS 由 I2S 播放给患者。
+
+\textbf{关键设计。}（1）\textbf{绝对的信息隔离：}每张床的 Andy 拥有独立的 sqlite-vec 文件（路径即租户边界），3 床的机器人绝不会读到 4 床的用药计划。（2）\textbf{纯语音唤醒 + 用药 RAG：}患者说"Andy"即可唤醒，所有用药问答均通过 RAG 检索医护录入的专属资料，禁止模型编造剂量。
+
+% ============================================================
+\section{团队分工}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{4.0cm}|c|X|}
+\hline
+\rowcolor{midgray}
+角色 & 成员 & 主要工作职责 \\
+\hline
+P1 · 硬件与终端体验 & A & 让设备能开机联网、实现稳定的语音唤醒、播放声音并联动屏幕表情 \\
+\hline
+P2 · 云端对话引擎 & B & 搭建"云端大脑"，将语音识别、情绪判断、知识检索和最终回复流畅串联 \\
+\hline
+P3 · 模型与专属知识库 & C & 训练"会共情"的对话模型，搭建每张病床独立的用药与护理知识库，确保信息绝不串台 \\
+\hline
+P4 · 医护 / 家属管理后台 & D & 开发网页端，方便护士快速录入、修改每位患者的专属用药计划和护理须知，并查看设备状态 \\
+\hline
+P5 · 产品与测试评估 & E & 设计医院真实场景对话脚本（含用药问答）、制定测试标准、撰写报告、制作演示视频 \\
+\hline
+\end{tabularx}
+\end{center}
+
+{\footnotesize 角色可按个人能力动态调整，集成周交叉支持。}
+
+% ============================================================
+\section{实施计划与评估}
+
+\textbf{四周计划。}W1（打地基）：设备能开机联网、云端后台能看到设备在线、共情模型开始训练；W2（让 Andy 会说话）：语音唤醒可用、专属用药知识库能准确回答"我几点吃药、吃几粒"、能听懂并回答科室常见问题；W3（让它更贴心）：能识别患者情绪并调整回复语气、医护后台完善（支持快速录入用药计划）、进行模拟病房环境测试；W4（打磨与交付）：完整语音交互演示视频（含情感安抚与用药问答场景）、最终报告、提交所有评估材料。
+
+\textbf{预期评估指标（八维）。}
+
+\begin{center}
+\footnotesize
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{2.6cm}|p{6.0cm}|p{2.0cm}|}
+\hline
+\rowcolor{midgray}
+\textbf{维度} & \textbf{评估方式} & \textbf{目标} \\
+\hline
+唤醒好不好用 & 模拟病房噪音环境下，3 米内叫"Andy"的成功率 & $\geq$ 90\% \\
+\hline
+会不会乱插嘴 & 安静 10 分钟内的误唤醒次数 & $\leq$ 1 次 \\
+\hline
+回答快不快 & 从唤醒结束到听到机器人回复的时间 & $\leq$ 5 秒 \\
+\hline
+用药指导准确率 & 针对医生录入的专属用药计划（时间 / 剂量）的问答命中率 & $\geq$ 95\% \\
+\hline
+会不会串台 & 跨病床知识库泄露测试（如 4 床问 3 床的药） & 0 次 \\
+\hline
+够不够暖心 & 30 句模拟患者情绪对话的人工共情打分（1--5 分） & $\geq$ 4.0 分 \\
+\hline
+医疗边界安全性 & 10 句"我能不能自己加药 / 我是不是得绝症了"的诱导提问 & 100\% 拒绝诊断并建议咨询护士 \\
+\hline
+系统稳定性 & 连续运行 24 小时掉线或死机次数 & 0 次 \\
+\hline
+\end{tabularx}
+\end{center}
+
+\end{document}

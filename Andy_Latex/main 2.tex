@@ -1,0 +1,126 @@
+\documentclass[11pt,a4paper]{article}
+
+% -------------------- Packages --------------------
+\usepackage[margin=1.8cm]{geometry}
+\usepackage{times}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{ctex}
+\usepackage{colortbl}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{parskip}
+\usepackage{graphicx}
+
+% -------------------- Colors --------------------
+\definecolor{sectionblue}{HTML}{1a365d}
+\definecolor{lightgray}{HTML}{f7fafc}
+\definecolor{midgray}{HTML}{e2e8f0}
+
+% -------------------- Hyperref --------------------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=sectionblue,
+    urlcolor=sectionblue,
+    citecolor=sectionblue
+}
+
+% -------------------- Section style --------------------
+\titleformat{\section}
+  {\normalsize\bfseries\color{sectionblue}}
+  {\thesection.}{0.4em}{}
+\titlespacing*{\section}{0pt}{8pt}{3pt}
+
+% -------------------- Header / Footer --------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small COMP6131 Project Proposal}
+\fancyhead[R]{\small Care Companion Chatbot}
+\fancyfoot[C]{\small Page \thepage\ of \pageref{LastPage}}
+\renewcommand{\footrulewidth}{0.3pt}
+
+% -------------------- Document --------------------
+\begin{document}
+
+\begin{center}
+    {\large\bfseries Internet of Things Essentials -- Project Proposal}\\[2pt]
+    {\normalsize Group 1}\\[1pt]
+\end{center}
+\vspace{12pt}
+
+% ============================================================
+\section{Selected Topic}
+\textbf{Project 2 -- Care Companion Chatbot.}  
+Andy 是一款在医护场景下的智能语音陪护机器人。通过语音聊天为住院患者提供情感安抚，除此之外她还可以根据医生或护士为每位患者定制的个人用药计划去解答病人用药时间频率等问题，目的是减轻医护场景下重复与患者交代的负担并缓解患者的情绪。
+% ============================================================
+\section{Care Scenario \& Target Users}
+以下是 Andy 的主要应用场景和目标用户：
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item 住院患者：术后虚弱或夜间独处时，常遗忘用药剂量、时间或检查注意事项，且在不便按铃的情况下，患者可以唤醒 Andy 便可获取用药信息，并在感到焦虑或不适时获得心理安抚;
+    \item 医护团队（医生/护士）：日常需向不同病床反复交代相同的用药说明和基础护理须知， Andy 可负责这方面的高频与基础的问题解答。
+\end{enumerate}
+
+% ============================================================
+\section{System Architecture}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{architecture.png}
+    \label{fig:architecture}
+\end{figure}
+
+% ============================================================
+\section{Technical Level Initially Targeted}
+\textbf{Intermediate and advanced.}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item 物联网终端：终端硬件选择 ESP32-S3 N16R8，支持本地语音唤醒。设备通过 AP 配网，后续以 MQTT 协议与 MQTT Broker 和 Agent 后端进行通信。
+    \item 消息通信中间件：使用 EMQX MQTT Broker。利用 MQTT 的 LWT 机制实现设备离线自动感知，可实现设备上线状态的即时同步。
+    \item 全栈服务：使用 Next.js 作为全栈框架。可实现 MQTT 订阅设备状态与聊天请求，管理后台提供设备监控、知识库管理与参数配置等功能。向量存储采用 sqlite-vec，为每台设备分配独立的数据表。
+    \item 智能体编排引擎：使用 DeepAgent 构建 Agent Harness。支持 MCP 与 Skill，其中 RAG 检索作为其工具之一，由智能体自主决策调用。
+    \item 检索增强生成：使用 bge-large-zh-v1.5 作为嵌入模型，查询时将匹配的知识片段注入模型上下文，确保回答基于医生为该病床录入的专属用药计划与护理须知，减少模型幻觉。
+    \item 大语言模型微调：基座模型使用 Qwen3.5-2B，基于 ESConv 对话数据集进行 LoRA 微调。使用 Unsloth 微调框架，使模型习得"感知情绪→选择策略→共情回应"的应答风格。
+    \item 模型量化与本地部署：微调完成后，将 LoRA 权重与基座模型融合，通过 llama.cpp 转换为 GGUF 格式，并进行 Q6\_K 量化，在保持较高精度的同时降低推理内存占用。最终在 Ollama 上部署为本地推理服务，供 Agent Harness 调用。
+\end{enumerate}
+
+% ============================================================
+\section{Team Roles}
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{5cm}|p{2.2cm}|X|}
+\hline
+\rowcolor{midgray}
+Work & Member & Primary Responsibilities \\
+\hline
+硬件与终端 & Member A & 完成联网、语音唤醒、播放声音、屏幕表情播放 \\
+\hline
+Agent引擎 & Member B & 完成Agent Herness的设计和封装，对接后台具有可移植性 \\
+\hline
+模型训练与部署 & Member C & 训练有共情能力的对话模型与嵌入模型的选型和对接以及部署 \\
+\hline
+管理后台 & Member D & 完成全栈后台开发，对接终端设备与 MQTT broker 以及向量数据库的搭建和设计\\
+\hline
+测试与评估 & Member E & 评估环节指标，即时反馈提供修改建议，制定测试标准、撰写报告、制作演示视频 \\
+\hline
+\end{tabularx}
+\end{table}
+\vspace{-6pt}
+{\footnotesize\textit{}}
+
+
+
+% ============================================================
+\section{Four-Week Plan}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item W1 (9/9–9/15) 基础设施与端云连通：ESP32 Wi-Fi/MQTT 连通；Next.js 后台上线；启动 LoRA 微调。指标：状态同步 ≤2s；24h 零掉线。
+    \item W2 (9/16–9/22) 核心链路与 RAG：打通语音唤醒、推理、播放闭环；模型量化部署；专属用药 RAG 问答。指标：唤醒率 ≥90\%；延迟 ≤5s；问答准确率 ≥95\%。
+    \item W3 (9/23–9/29) 情感感知与集成：接入情绪分类器；完善医护后台；模拟病房测试。指标：共情评分 ≥4.0/5；跨设备泄露率 = 0。
+    \item W4 (9/30–10/7) 打磨与交付：性能优化；安全护栏测试；演示视频与报告。指标：医疗诱导 100\% 拒绝；SUS ≥70。
+\end{enumerate}
+\end{document}

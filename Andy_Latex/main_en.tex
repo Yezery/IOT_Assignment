@@ -1,0 +1,126 @@
+\documentclass[11pt,a4paper]{article}
+
+% -------------------- Packages --------------------
+\usepackage[margin=1.8cm]{geometry}
+\usepackage{times}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+
+\usepackage{colortbl}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{parskip}
+\usepackage{graphicx}
+
+% -------------------- Colors --------------------
+\definecolor{sectionblue}{HTML}{1a365d}
+\definecolor{lightgray}{HTML}{f7fafc}
+\definecolor{midgray}{HTML}{e2e8f0}
+
+% -------------------- Hyperref --------------------
+\hypersetup{
+    colorlinks=true,
+    linkcolor=sectionblue,
+    urlcolor=sectionblue,
+    citecolor=sectionblue
+}
+
+% -------------------- Section style --------------------
+\titleformat{\section}
+  {\normalsize\bfseries\color{sectionblue}}
+  {\thesection.}{0.4em}{}
+\titlespacing*{\section}{0pt}{8pt}{3pt}
+
+% -------------------- Header / Footer --------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small COMP6131 Project Proposal}
+\fancyhead[R]{\small Care Companion Chatbot}
+\fancyfoot[C]{\small Page \thepage\ of \pageref{LastPage}}
+\renewcommand{\footrulewidth}{0.3pt}
+
+% -------------------- Document --------------------
+\begin{document}
+
+\begin{center}
+    {\large\bfseries Internet of Things Essentials -- Project Proposal}\\[2pt]
+    {\normalsize Group 1}\\[1pt]
+\end{center}
+\vspace{12pt}
+
+% ============================================================
+\section{Selected Topic}
+\textbf{Project 2 -- Care Companion Chatbot.}  
+Andy is an intelligent voice companion robot designed for healthcare scenarios. Through voice-based conversation, it provides emotional comfort to hospitalized patients. In addition, it can answer patients' questions about medication timing and dosage based on personalized medication plans customized by doctors or nurses for each patient. The goal is to reduce the burden of repetitive explanations in healthcare settings while alleviating patients' emotional distress.
+% ============================================================
+\section{Care Scenario \& Target Users}
+Below are the primary use cases and target users for Andy:
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item Hospitalized patients: When weakened after surgery or alone at night, patients often forget medication dosages, timing, or examination instructions. When it is inconvenient to press the call button, patients can activate Andy to obtain medication information and receive psychological comfort when feeling anxious or uncomfortable.
+    \item Healthcare team (doctors/nurses): Medical staff must repeatedly explain the same medication instructions and basic care guidelines to different beds daily. Andy can handle these high-frequency and routine questions.
+\end{enumerate}
+
+% ============================================================
+\section{System Architecture}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{architecture.png}
+    \label{fig:architecture}
+\end{figure}
+
+% ============================================================
+\section{Technical Level Initially Targeted}
+\textbf{Intermediate and advanced.}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item IoT terminal: The terminal hardware is ESP32-S3 N16R8, supporting local voice wake-up. The device connects via AP provisioning and communicates with the MQTT Broker and Agent backend using the MQTT protocol.
+    \item Message middleware: EMQX MQTT Broker is used. Leveraging MQTT's LWT (Last Will and Testament) mechanism enables automatic offline device detection and real-time online status synchronization.
+    \item Full-stack service: Next.js serves as the full-stack framework. It subscribes to device status and chat requests via MQTT. The management dashboard provides device monitoring, knowledge base management, and parameter configuration. SQLite-vec is used for vector storage, with a separate data table allocated for each device.
+    \item Agent orchestration engine: DeepAgent is used to build the Agent Harness. It supports MCP (Model Context Protocol) and Skills, with RAG retrieval as one of its tools, autonomously invoked by the agent based on decision-making.
+    \item Retrieval-Augmented Generation (RAG): bge-large-zh-v1.5 serves as the embedding model. During queries, matched knowledge fragments are injected into the model context, ensuring responses are grounded in the personalized medication plans and care guidelines recorded by doctors for each bed, thereby reducing model hallucination.
+    \item LLM fine-tuning: The base model is Qwen3.5-2B, fine-tuned with LoRA on the ESConv dialogue dataset. The Unsloth fine-tuning framework is used to train the model to adopt a ``perceive emotion $\rightarrow$ select strategy $\rightarrow$ empathic response'' conversation style.
+    \item Model quantization and local deployment: After fine-tuning, LoRA weights are merged with the base model, converted to GGUF format via llama.cpp, and quantized with Q6\_K to maintain high accuracy while reducing inference memory footprint. The model is ultimately deployed on Ollama as a local inference service for the Agent Harness to call.
+\end{enumerate}
+
+% ============================================================
+\section{Team Roles}
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{5cm}|p{2.2cm}|X|}
+\hline
+\rowcolor{midgray}
+Work & Member & Primary Responsibilities \\
+\hline
+Hardware \& Terminal & Zhengrui Ye & Complete network connectivity, voice wake-up, audio playback, and screen expression display \\
+\hline
+Agent Engine & Guoliang Huang & Design and encapsulate the Agent Harness, ensuring portability for backend integration \\
+\hline
+Model Training \& Deployment & Jinfei Luo & Train empathic dialogue model, select and integrate embedding models, and complete model deployment \\
+\hline
+Management Dashboard & Haoyang Tan & Complete full-stack backend development, integrate terminal devices with MQTT broker, and design/vector database \\
+\hline
+Testing \& Evaluation & Jiashuo Bai& Evaluate metrics at each stage, provide real-time feedback and modification suggestions, define testing standards, write reports, and produce demonstration videos \\
+\hline
+\end{tabularx}
+\end{table}
+\vspace{-6pt}
+{\footnotesize\textit{}}
+
+
+
+% ============================================================
+\section{Four-Week Plan}
+\begin{enumerate}[leftmargin=*,itemsep=1pt,topsep=2pt]
+    \item W1 (9/9--9/15) Infrastructure \& Edge-Cloud Connectivity: ESP32 Wi-Fi/MQTT connectivity; Next.js backend online; initiate LoRA fine-tuning. Metrics: Status synchronization $\leq$2s; 24h zero disconnection.
+    \item W2 (9/16--9/22) Core Pipeline \& RAG: Complete voice wake-up, inference, and playback loop; model quantization and deployment; personalized medication RAG Q\&A. Metrics: Wake-up rate $\geq$90\%; latency $\leq$5s; Q\&A accuracy $\geq$95\%.
+    \item W3 (9/23--9/29) Emotion Perception \& Integration: Integrate emotion classifier; improve healthcare dashboard; ward simulation testing. Metrics: Empathy score $\geq$4.0/5; cross-device data leakage = 0.
+    \item W4 (9/30--10/7) Polish \& Delivery: Performance optimization; safety guardrail testing; demonstration video and report. Metrics: 100\% rejection of medical-inducing queries; SUS $\geq$70.
+\end{enumerate}
+\end{document}

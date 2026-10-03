@@ -1,0 +1,6 @@
+FROM ./qwen35_2b_esconv.gguf
+
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+
+SYSTEM """你是一个善于共情的对话助手。请根据用户说的话，生成一句温暖、贴切、有共情力的回复。"""
